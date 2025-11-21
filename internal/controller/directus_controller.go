@@ -342,6 +342,29 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 					},
 				},
 			)
+		} else if directus.Spec.Database.External != nil {
+			ext := directus.Spec.Database.External
+			client := "postgresql"
+			if directus.Spec.Database.Type == "mysql" {
+				client = "mysql"
+			}
+
+			container.Env = append(container.Env,
+				corev1.EnvVar{Name: "DB_CLIENT", Value: client},
+				corev1.EnvVar{Name: "DB_HOST", Value: ext.Host},
+				corev1.EnvVar{Name: "DB_PORT", Value: fmt.Sprintf("%d", ext.Port)},
+				corev1.EnvVar{Name: "DB_DATABASE", Value: ext.Database},
+				corev1.EnvVar{Name: "DB_USER", Value: ext.User},
+				corev1.EnvVar{
+					Name: "DB_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: ext.PasswordSecretRef.Name},
+							Key:                  ext.PasswordSecretRef.Key,
+						},
+					},
+				},
+			)
 		}
 
 		dep.Spec.Template.Spec.Containers = []corev1.Container{container}
