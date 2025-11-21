@@ -42,6 +42,46 @@ spec:
               database:
                 description: Database configures the database connection.
                 properties:
+                  external:
+                    description: External configures an external database connection.
+                    properties:
+                      database:
+                        description: Database is the database name.
+                        type: string
+                      host:
+                        description: Host is the database host.
+                        type: string
+                      passwordSecretRef:
+                        description: PasswordSecretRef references a secret containing
+                          the password.
+                        properties:
+                          key:
+                            description: Key is the key in the secret.
+                            type: string
+                          name:
+                            description: Name is the name of the secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      port:
+                        description: Port is the database port.
+                        type: integer
+                      sslMode:
+                        description: SSLMode is the SSL mode (disable, require, verify-ca,
+                          verify-full).
+                        type: string
+                      user:
+                        description: User is the database user.
+                        type: string
+                    required:
+                    - database
+                    - host
+                    - passwordSecretRef
+                    - port
+                    - user
+                    type: object
                   postgres:
                     description: Postgres configures the CloudNativePG cluster if
                       Type is postgres.
@@ -81,6 +121,15 @@ spec:
                   - source
                   type: object
                 type: array
+              extensionsConfig:
+                description: ExtensionsConfig configures extension installation.
+                properties:
+                  secretRef:
+                    description: |-
+                      SecretRef is the name of the secret containing the .npmrc file.
+                      The secret must have a key named ".npmrc".
+                    type: string
+                type: object
               image:
                 description: Image is the Directus image to use.
                 type: string

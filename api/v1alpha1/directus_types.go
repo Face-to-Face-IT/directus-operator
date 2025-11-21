@@ -62,6 +62,39 @@ type DatabaseConfig struct {
 	// Postgres configures the CloudNativePG cluster if Type is postgres.
 	// +optional
 	Postgres *PostgresConfig `json:"postgres,omitempty"`
+
+	// External configures an external database connection.
+	// +optional
+	External *ExternalDatabaseConfig `json:"external,omitempty"`
+}
+
+type ExternalDatabaseConfig struct {
+	// Host is the database host.
+	Host string `json:"host"`
+
+	// Port is the database port.
+	Port int `json:"port"`
+
+	// User is the database user.
+	User string `json:"user"`
+
+	// PasswordSecretRef references a secret containing the password.
+	PasswordSecretRef SecretRef `json:"passwordSecretRef"`
+
+	// Database is the database name.
+	Database string `json:"database"`
+
+	// SSLMode is the SSL mode (disable, require, verify-ca, verify-full).
+	// +optional
+	SSLMode string `json:"sslMode,omitempty"`
+}
+
+type SecretRef struct {
+	// Name is the name of the secret.
+	Name string `json:"name"`
+
+	// Key is the key in the secret.
+	Key string `json:"key"`
 }
 
 type PostgresConfig struct {
