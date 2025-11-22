@@ -203,8 +203,13 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": directus.Name}
 
 		// Apply pod annotations if specified
-		if directus.Spec.PodAnnotations != nil {
-			dep.Spec.Template.ObjectMeta.Annotations = directus.Spec.PodAnnotations
+		if len(directus.Spec.PodAnnotations) > 0 {
+			if dep.Spec.Template.ObjectMeta.Annotations == nil {
+				dep.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+			}
+			for k, v := range directus.Spec.PodAnnotations {
+				dep.Spec.Template.ObjectMeta.Annotations[k] = v
+			}
 		}
 
 		// Init Container for Extensions
