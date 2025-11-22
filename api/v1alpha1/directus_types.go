@@ -56,6 +56,10 @@ type DirectusSpec struct {
 	// AdminEmail is the email for the admin user.
 	// +optional
 	AdminEmail string `json:"adminEmail,omitempty"`
+
+	// PodAnnotations are additional annotations to add to the Directus pods.
+	// +optional
+	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.client == 'sqlite3' ? has(self.sqlite) : !has(self.sqlite)",message="sqlite config must be set if and only if client is sqlite3"

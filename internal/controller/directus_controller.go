@@ -118,27 +118,27 @@ func (r *DirectusReconciler) reconcilePVC(ctx context.Context, directus *appsv1a
 
 	_, err := ctrl.CreateOrUpdate(ctx, r.Client, pvc, func() error {
 		pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-		
+
 		storage := directus.Spec.Database.SQLite.Persistence.Size
 		if storage == "" {
 			storage = "1Gi"
 		}
-		
+
 		qty, err := resource.ParseQuantity(storage)
 		if err != nil {
 			return err
 		}
-		
+
 		pvc.Spec.Resources = corev1.VolumeResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceStorage: qty,
 			},
 		}
-		
+
 		if directus.Spec.Database.SQLite.Persistence.StorageClassName != "" {
 			pvc.Spec.StorageClassName = &directus.Spec.Database.SQLite.Persistence.StorageClassName
 		}
-		
+
 		return ctrl.SetControllerReference(directus, pvc, r.Scheme)
 	})
 
@@ -201,6 +201,11 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 			MatchLabels: map[string]string{"app": directus.Name},
 		}
 		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"app": directus.Name}
+
+		// Apply pod annotations if specified
+		if directus.Spec.PodAnnotations != nil {
+			dep.Spec.Template.ObjectMeta.Annotations = directus.Spec.PodAnnotations
+		}
 
 		// Init Container for Extensions
 		initContainers := []corev1.Container{}
@@ -379,7 +384,7 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 					Name:  "DB_FILENAME",
 					Value: directus.Spec.Database.SQLite.Filename,
 				})
-				
+
 				if directus.Spec.Database.SQLite.Persistence != nil {
 					// Mount PVC
 					dep.Spec.Template.Spec.Volumes = append(dep.Spec.Template.Spec.Volumes, corev1.Volume{
@@ -400,7 +405,7 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 			// Networked Database
 			if directus.Spec.Database.Connection != nil {
 				conn := directus.Spec.Database.Connection
-				
+
 				if conn.Host != "" {
 					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_HOST", Value: conn.Host})
 				}
@@ -416,7 +421,7 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 				if conn.ConnectString != "" {
 					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_CONNECT_STRING", Value: conn.ConnectString})
 				}
-				
+
 				if conn.PasswordSecretRef != nil {
 					container.Env = append(container.Env, corev1.EnvVar{
 						Name: "DB_PASSWORD",
@@ -428,7 +433,7 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 						},
 					})
 				}
-				
+
 				if conn.SSL != nil {
 					if conn.SSL.Mode != "" {
 						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_SSL", Value: "true"})

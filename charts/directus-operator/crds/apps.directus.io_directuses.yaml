@@ -219,6 +219,12 @@ spec:
                     description: TLS enables TLS.
                     type: boolean
                 type: object
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                description: PodAnnotations are additional annotations to add to the
+                  Directus pods.
+                type: object
               publicUrl:
                 description: PublicURL overrides the PUBLIC_URL environment variable.
                 type: string
