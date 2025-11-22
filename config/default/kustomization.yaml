@@ -145,4 +145,4 @@ patchesStrategicMerge:
 
 images:
 - name: controller
-  newName: ghcr.io/Face-to-Face-IT/directus-operator
+  newName: ghcr.io/face-to-face-it/directus-operator

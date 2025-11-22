@@ -9,7 +9,7 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: directus-operator
-repo: github.com/Face-to-Face-IT/directus-operator
+repo: github.com/face-to-face-it/directus-operator
 resources:
 - api:
     crdVersion: v1
