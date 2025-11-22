@@ -22,20 +22,20 @@ entries:
     - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.4.0-alpha/directus-operator-0.4.0-alpha.tgz
     version: 0.4.0-alpha
   - apiVersion: v2
-    appVersion: 0.3.0-alpha
-    created: "2025-11-21T23:31:25.821768684Z"
+    appVersion: 0.4.0-alpha
+    created: "2025-11-22T19:02:02.752109725Z"
     description: A Helm chart for Kubernetes
-    digest: 4f93027873679e4c1b1865b5ae61772bac4bdf388c683ae7af9894a8d78c28d1
+    digest: c7266e5d2ee644da952f70e9d3b76d4f5eadb0ed3f393a79ece48a0605e89bc1
     name: directus-operator
     type: application
     urls:
-    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.3.0-alpha/directus-operator-0.3.0-alpha.tgz
-    version: 0.3.0-alpha
+    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.4.0-alpha/directus-operator-0.4.0-alpha.tgz
+    version: 0.4.0-alpha
   - apiVersion: v2
     appVersion: 0.3.0-alpha
-    created: "2025-11-22T12:12:35.50569802Z"
+    created: "2025-11-22T12:21:35.483945485Z"
     description: A Helm chart for Kubernetes
-    digest: ccf351efd796c37810e2c7f3b5cea558894c37131fc1cdbb75e9f0a7270cab84
+    digest: d7859e8059525f69685e6e232bbe169f850b2466c1d1301d733f25998e658f1c
     name: directus-operator
     type: application
     urls:
@@ -63,9 +63,9 @@ entries:
     version: 0.3.0-alpha
   - apiVersion: v2
     appVersion: 0.3.0-alpha
-    created: "2025-11-22T12:21:35.483945485Z"
+    created: "2025-11-22T12:12:35.50569802Z"
     description: A Helm chart for Kubernetes
-    digest: d7859e8059525f69685e6e232bbe169f850b2466c1d1301d733f25998e658f1c
+    digest: ccf351efd796c37810e2c7f3b5cea558894c37131fc1cdbb75e9f0a7270cab84
     name: directus-operator
     type: application
     urls:
@@ -86,6 +86,16 @@ entries:
     created: "2025-11-22T14:26:54.805040173Z"
     description: A Helm chart for Kubernetes
     digest: ac8307390f42e45d21cf27a986f0fb19bd90b12c036244b81f6dab1c5f638260
+    name: directus-operator
+    type: application
+    urls:
+    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.3.0-alpha/directus-operator-0.3.0-alpha.tgz
+    version: 0.3.0-alpha
+  - apiVersion: v2
+    appVersion: 0.3.0-alpha
+    created: "2025-11-21T23:31:25.821768684Z"
+    description: A Helm chart for Kubernetes
+    digest: 4f93027873679e4c1b1865b5ae61772bac4bdf388c683ae7af9894a8d78c28d1
     name: directus-operator
     type: application
     urls:
@@ -121,4 +131,4 @@ entries:
     urls:
     - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.1.0-alpha/directus-operator-0.1.0-alpha.tgz
     version: 0.1.0-alpha
-generated: "2025-11-22T19:01:28.723273052Z"
+generated: "2025-11-22T19:02:02.752236822Z"
