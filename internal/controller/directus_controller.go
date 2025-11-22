@@ -219,16 +219,25 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 
 			for _, ext := range directus.Spec.Extensions {
 				cmd += fmt.Sprintf("echo 'Processing extension %s'; ", ext.Name)
-				if ext.Type == "npm" {
+
+				extType := ext.Type
+				source := ext.Source
+
+				if strings.HasPrefix(source, "npm:") {
+					extType = "npm"
+					source = strings.TrimPrefix(source, "npm:")
+				}
+
+				if extType == "npm" {
 					// Install via npm
-					installCmd := ext.Source
+					installCmd := source
 					if ext.Version != "" {
-						installCmd = fmt.Sprintf("%s@%s", ext.Source, ext.Version)
+						installCmd = fmt.Sprintf("%s@%s", source, ext.Version)
 					}
 					cmd += fmt.Sprintf("npm install %s && ", installCmd)
 
 					// Extract package name from source to handle versions (e.g. pkg@1.0.0)
-					pkgName := ext.Source
+					pkgName := source
 					if strings.HasPrefix(pkgName, "@") {
 						if idx := strings.Index(pkgName[1:], "@"); idx != -1 {
 							pkgName = pkgName[:idx+1]
@@ -242,14 +251,14 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 					// Move from node_modules to the target directory
 					// We assume Source is the package name.
 					cmd += fmt.Sprintf("mkdir -p /directus/extensions/%s && cp -r node_modules/%s/* /directus/extensions/%s/; ", ext.Name, pkgName, ext.Name)
-				} else if ext.Type == "git" {
+				} else if extType == "git" {
 					// Git clone
 					cmd += fmt.Sprintf("mkdir -p /directus/extensions/%s && ", ext.Name)
-					cmd += fmt.Sprintf("git clone %s /directus/extensions/%s; ", ext.Source, ext.Name)
+					cmd += fmt.Sprintf("git clone %s /directus/extensions/%s; ", source, ext.Name)
 				} else {
 					// Default to URL/tarball
 					cmd += fmt.Sprintf("mkdir -p /directus/extensions/%s && ", ext.Name)
-					cmd += fmt.Sprintf("wget -O /temp-extensions/%s.tar.gz %s && tar -xzf /temp-extensions/%s.tar.gz -C /directus/extensions/%s; ", ext.Name, ext.Source, ext.Name, ext.Name)
+					cmd += fmt.Sprintf("wget -O /temp-extensions/%s.tar.gz %s && tar -xzf /temp-extensions/%s.tar.gz -C /directus/extensions/%s; ", ext.Name, source, ext.Name, ext.Name)
 				}
 			}
 
