@@ -142,3 +142,7 @@ patchesStrategicMerge:
 #          delimiter: '.'
 #          index: 1
 #          create: true
+
+images:
+- name: controller
+  newName: ghcr.io/Face-to-Face-IT/directus-operator
