@@ -25,14 +25,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	appsv1alpha1 "github.com/zjpiazza/directus-operator/api/v1alpha1"
 )
 
@@ -48,7 +49,7 @@ type DirectusReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=postgresql.cnpg.io,resources=clusters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -65,36 +66,24 @@ func (r *DirectusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile Database
-	dbSecretName := ""
-	if directus.Spec.Database.Type == "postgres" && directus.Spec.Database.Postgres != nil {
-		dbSecretName, err = r.reconcilePostgres(ctx, directus)
+	// Reconcile PVC for SQLite if needed
+	if directus.Spec.Database.Client == "sqlite3" && directus.Spec.Database.SQLite != nil && directus.Spec.Database.SQLite.Persistence != nil {
+		err = r.reconcilePVC(ctx, directus)
 		if err != nil {
-			log.Error(err, "Failed to reconcile Postgres")
+			log.Error(err, "Failed to reconcile PVC")
 			return ctrl.Result{}, err
-		}
-
-		// Check if Database is ready
-		clusterName := directus.Name + "-db"
-		cluster := &cnpgv1.Cluster{}
-		err = r.Get(ctx, client.ObjectKey{Name: clusterName, Namespace: directus.Namespace}, cluster)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// Cluster not created yet, requeue
-				return ctrl.Result{Requeue: true}, nil
-			}
-			log.Error(err, "Failed to get Postgres Cluster")
-			return ctrl.Result{}, err
-		}
-
-		if cluster.Status.Phase != "Cluster in healthy state" {
-			log.Info("Postgres Cluster is not ready yet", "Phase", cluster.Status.Phase)
-			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 
+	// Reconcile Secrets
+	err = r.reconcileSecrets(ctx, directus)
+	if err != nil {
+		log.Error(err, "Failed to reconcile Secrets")
+		return ctrl.Result{}, err
+	}
+
 	// Reconcile Deployment
-	err = r.reconcileDeployment(ctx, directus, dbSecretName)
+	err = r.reconcileDeployment(ctx, directus)
 	if err != nil {
 		log.Error(err, "Failed to reconcile Deployment")
 		return ctrl.Result{}, err
@@ -119,40 +108,82 @@ func (r *DirectusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-func (r *DirectusReconciler) reconcilePostgres(ctx context.Context, directus *appsv1alpha1.Directus) (string, error) {
-	clusterName := directus.Name + "-db"
-	cluster := &cnpgv1.Cluster{
+func (r *DirectusReconciler) reconcilePVC(ctx context.Context, directus *appsv1alpha1.Directus) error {
+	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterName,
+			Name:      directus.Name + "-data",
 			Namespace: directus.Namespace,
 		},
 	}
 
-	_, err := ctrl.CreateOrUpdate(ctx, r.Client, cluster, func() error {
-		cluster.Spec.Instances = directus.Spec.Database.Postgres.Instances
-		cluster.Spec.StorageConfiguration.Size = directus.Spec.Database.Postgres.Storage
-
-		// Basic configuration for CNPG
-		if cluster.Spec.Bootstrap == nil {
-			cluster.Spec.Bootstrap = &cnpgv1.BootstrapConfiguration{
-				InitDB: &cnpgv1.BootstrapInitDB{
-					Database: "directus",
-					Owner:    "directus",
-				},
-			}
+	_, err := ctrl.CreateOrUpdate(ctx, r.Client, pvc, func() error {
+		pvc.Spec.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+		
+		storage := directus.Spec.Database.SQLite.Persistence.Size
+		if storage == "" {
+			storage = "1Gi"
 		}
-		return ctrl.SetControllerReference(directus, cluster, r.Scheme)
+		
+		qty, err := resource.ParseQuantity(storage)
+		if err != nil {
+			return err
+		}
+		
+		pvc.Spec.Resources = corev1.VolumeResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceStorage: qty,
+			},
+		}
+		
+		if directus.Spec.Database.SQLite.Persistence.StorageClassName != "" {
+			pvc.Spec.StorageClassName = &directus.Spec.Database.SQLite.Persistence.StorageClassName
+		}
+		
+		return ctrl.SetControllerReference(directus, pvc, r.Scheme)
 	})
 
-	if err != nil {
-		return "", err
-	}
-
-	// Return the secret name that CNPG creates (usually clusterName-app)
-	return clusterName + "-app", nil
+	return err
 }
 
-func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *appsv1alpha1.Directus, dbSecretName string) error {
+func (r *DirectusReconciler) reconcileSecrets(ctx context.Context, directus *appsv1alpha1.Directus) error {
+	secretName := directus.Name + "-secrets"
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, client.ObjectKey{Name: secretName, Namespace: directus.Namespace}, secret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new secret
+			key := string(uuid.NewUUID())
+			sec := string(uuid.NewUUID())
+			adminPassword := string(uuid.NewUUID()) // Simple random string
+			adminEmail := "admin@example.com"
+			if directus.Spec.AdminEmail != "" {
+				adminEmail = directus.Spec.AdminEmail
+			}
+
+			secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: directus.Namespace,
+				},
+				StringData: map[string]string{
+					"KEY":            key,
+					"SECRET":         sec,
+					"ADMIN_EMAIL":    adminEmail,
+					"ADMIN_PASSWORD": adminPassword,
+				},
+			}
+			// Set owner ref
+			if err := ctrl.SetControllerReference(directus, secret, r.Scheme); err != nil {
+				return err
+			}
+			return r.Create(ctx, secret)
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *appsv1alpha1.Directus) error {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      directus.Name,
@@ -280,10 +311,42 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 			Image: directus.Spec.Image,
 			Ports: []corev1.ContainerPort{{ContainerPort: 8055}},
 			Env: []corev1.EnvVar{
-				{Name: "KEY", Value: "directus-key"},       // Should be a secret
-				{Name: "SECRET", Value: "directus-secret"}, // Should be a secret
-				{Name: "ADMIN_EMAIL", Value: "admin@example.com"},
-				{Name: "ADMIN_PASSWORD", Value: "password"},
+				{
+					Name: "KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: directus.Name + "-secrets"},
+							Key:                  "KEY",
+						},
+					},
+				},
+				{
+					Name: "SECRET",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: directus.Name + "-secrets"},
+							Key:                  "SECRET",
+						},
+					},
+				},
+				{
+					Name: "ADMIN_EMAIL",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: directus.Name + "-secrets"},
+							Key:                  "ADMIN_EMAIL",
+						},
+					},
+				},
+				{
+					Name: "ADMIN_PASSWORD",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: directus.Name + "-secrets"},
+							Key:                  "ADMIN_PASSWORD",
+						},
+					},
+				},
 			},
 			VolumeMounts: volumeMounts,
 		}
@@ -304,76 +367,75 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 			})
 		}
 
-		if dbSecretName != "" {
-			container.Env = append(container.Env,
-				corev1.EnvVar{
-					Name:  "DB_CLIENT",
-					Value: "postgresql",
-				},
-				corev1.EnvVar{
-					Name: "DB_HOST",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: dbSecretName},
-							Key:                  "host",
-						},
-					},
-				},
-				corev1.EnvVar{
-					Name:  "DB_PORT",
-					Value: "5432",
-				},
-				corev1.EnvVar{
-					Name: "DB_DATABASE",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: dbSecretName},
-							Key:                  "dbname",
-						},
-					},
-				},
-				corev1.EnvVar{
-					Name: "DB_USER",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: dbSecretName},
-							Key:                  "user",
-						},
-					},
-				},
-				corev1.EnvVar{
-					Name: "DB_PASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: dbSecretName},
-							Key:                  "password",
-						},
-					},
-				},
-			)
-		} else if directus.Spec.Database.External != nil {
-			ext := directus.Spec.Database.External
-			client := "postgresql"
-			if directus.Spec.Database.Type == "mysql" {
-				client = "mysql"
-			}
+		// Database Configuration
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "DB_CLIENT",
+			Value: directus.Spec.Database.Client,
+		})
 
-			container.Env = append(container.Env,
-				corev1.EnvVar{Name: "DB_CLIENT", Value: client},
-				corev1.EnvVar{Name: "DB_HOST", Value: ext.Host},
-				corev1.EnvVar{Name: "DB_PORT", Value: fmt.Sprintf("%d", ext.Port)},
-				corev1.EnvVar{Name: "DB_DATABASE", Value: ext.Database},
-				corev1.EnvVar{Name: "DB_USER", Value: ext.User},
-				corev1.EnvVar{
-					Name: "DB_PASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: ext.PasswordSecretRef.Name},
-							Key:                  ext.PasswordSecretRef.Key,
+		if directus.Spec.Database.Client == "sqlite3" {
+			if directus.Spec.Database.SQLite != nil {
+				container.Env = append(container.Env, corev1.EnvVar{
+					Name:  "DB_FILENAME",
+					Value: directus.Spec.Database.SQLite.Filename,
+				})
+				
+				if directus.Spec.Database.SQLite.Persistence != nil {
+					// Mount PVC
+					dep.Spec.Template.Spec.Volumes = append(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+						Name: "data",
+						VolumeSource: corev1.VolumeSource{
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: directus.Name + "-data",
+							},
 						},
-					},
-				},
-			)
+					})
+					container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+						Name:      "data",
+						MountPath: "/directus/database", // Assuming filename is relative or in this dir
+					})
+				}
+			}
+		} else {
+			// Networked Database
+			if directus.Spec.Database.Connection != nil {
+				conn := directus.Spec.Database.Connection
+				
+				if conn.Host != "" {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_HOST", Value: conn.Host})
+				}
+				if conn.Port != 0 {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_PORT", Value: fmt.Sprintf("%d", conn.Port)})
+				}
+				if conn.Database != "" {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_DATABASE", Value: conn.Database})
+				}
+				if conn.User != "" {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_USER", Value: conn.User})
+				}
+				if conn.ConnectString != "" {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_CONNECT_STRING", Value: conn.ConnectString})
+				}
+				
+				if conn.PasswordSecretRef != nil {
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name: "DB_PASSWORD",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: conn.PasswordSecretRef.Name},
+								Key:                  conn.PasswordSecretRef.Key,
+							},
+						},
+					})
+				}
+				
+				if conn.SSL != nil {
+					if conn.SSL.Mode != "" {
+						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_SSL", Value: "true"})
+						// Note: Directus might need more specific SSL env vars depending on the driver
+					}
+				}
+			}
 		}
 
 		dep.Spec.Template.Spec.Containers = []corev1.Container{container}
@@ -452,7 +514,7 @@ func (r *DirectusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&appsv1alpha1.Directus{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.Secret{}).
 		Owns(&networkingv1.Ingress{}).
-		Owns(&cnpgv1.Cluster{}).
 		Complete(r)
 }

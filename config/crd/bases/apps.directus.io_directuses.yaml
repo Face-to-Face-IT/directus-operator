@@ -39,12 +39,28 @@ spec:
           spec:
             description: DirectusSpec defines the desired state of Directus
             properties:
+              adminEmail:
+                description: AdminEmail is the email for the admin user.
+                type: string
               database:
                 description: Database configures the database connection.
                 properties:
-                  external:
-                    description: External configures an external database connection.
+                  client:
+                    description: Client specifies the database driver to use.
+                    enum:
+                    - pg
+                    - mysql
+                    - sqlite3
+                    - mssql
+                    - oracledb
+                    - cockroachdb
+                    type: string
+                  connection:
+                    description: Connection configures a networked database connection.
                     properties:
+                      connectString:
+                        description: ConnectString is the connection string for Oracle.
+                        type: string
                       database:
                         description: Database is the database name.
                         type: string
@@ -68,35 +84,92 @@ spec:
                       port:
                         description: Port is the database port.
                         type: integer
-                      sslMode:
-                        description: SSLMode is the SSL mode (disable, require, verify-ca,
-                          verify-full).
-                        type: string
+                      ssl:
+                        description: SSL configures SSL settings.
+                        properties:
+                          caSecretRef:
+                            description: CASecretRef references the CA certificate
+                              secret.
+                            properties:
+                              key:
+                                description: Key is the key in the secret.
+                                type: string
+                              name:
+                                description: Name is the name of the secret.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          certSecretRef:
+                            description: CertSecretRef references the client certificate
+                              secret.
+                            properties:
+                              key:
+                                description: Key is the key in the secret.
+                                type: string
+                              name:
+                                description: Name is the name of the secret.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          keySecretRef:
+                            description: KeySecretRef references the client key secret.
+                            properties:
+                              key:
+                                description: Key is the key in the secret.
+                                type: string
+                              name:
+                                description: Name is the name of the secret.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                          mode:
+                            description: Mode is the SSL mode.
+                            enum:
+                            - disable
+                            - require
+                            - verify-ca
+                            - verify-full
+                            type: string
+                        type: object
                       user:
                         description: User is the database user.
                         type: string
-                    required:
-                    - database
-                    - host
-                    - passwordSecretRef
-                    - port
-                    - user
                     type: object
-                  postgres:
-                    description: Postgres configures the CloudNativePG cluster if
-                      Type is postgres.
+                  sqlite:
+                    description: SQLite configures an embedded SQLite database.
                     properties:
-                      instances:
-                        description: Instances is the number of Postgres instances.
-                        type: integer
-                      storage:
-                        description: Storage is the storage size.
+                      filename:
+                        description: Filename is the path to the SQLite database file.
                         type: string
+                      persistence:
+                        description: Persistence configures the PVC for SQLite.
+                        properties:
+                          size:
+                            description: Size is the size of the PVC.
+                            type: string
+                          storageClassName:
+                            description: StorageClassName is the storage class for
+                              the PVC.
+                            type: string
+                        type: object
+                    required:
+                    - filename
                     type: object
-                  type:
-                    description: Type is the database type (postgres, mysql).
-                    type: string
+                required:
+                - client
                 type: object
+                x-kubernetes-validations:
+                - message: sqlite config must be set if and only if client is sqlite3
+                  rule: 'self.client == ''sqlite3'' ? has(self.sqlite) : !has(self.sqlite)'
+                - message: connection config must be set if and only if client is
+                    not sqlite3
+                  rule: 'self.client != ''sqlite3'' ? has(self.connection) : !has(self.connection)'
               extensions:
                 description: Extensions is a list of extensions to install.
                 items:

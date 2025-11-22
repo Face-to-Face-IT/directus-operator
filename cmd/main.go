@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	cnpgv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	appsv1alpha1 "github.com/zjpiazza/directus-operator/api/v1alpha1"
 	"github.com/zjpiazza/directus-operator/internal/controller"
 	//+kubebuilder:scaffold:imports
@@ -47,7 +46,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(appsv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(cnpgv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

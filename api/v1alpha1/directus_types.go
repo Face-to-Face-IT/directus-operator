@@ -52,41 +52,94 @@ type DirectusSpec struct {
 	// PublicURL overrides the PUBLIC_URL environment variable.
 	// +optional
 	PublicURL string `json:"publicUrl,omitempty"`
+
+	// AdminEmail is the email for the admin user.
+	// +optional
+	AdminEmail string `json:"adminEmail,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self.client == 'sqlite3' ? has(self.sqlite) : !has(self.sqlite)",message="sqlite config must be set if and only if client is sqlite3"
+// +kubebuilder:validation:XValidation:rule="self.client != 'sqlite3' ? has(self.connection) : !has(self.connection)",message="connection config must be set if and only if client is not sqlite3"
 type DatabaseConfig struct {
-	// Type is the database type (postgres, mysql).
-	// +optional
-	Type string `json:"type,omitempty"`
+	// Client specifies the database driver to use.
+	// +kubebuilder:validation:Enum=pg;mysql;sqlite3;mssql;oracledb;cockroachdb
+	Client string `json:"client"`
 
-	// Postgres configures the CloudNativePG cluster if Type is postgres.
+	// Connection configures a networked database connection.
 	// +optional
-	Postgres *PostgresConfig `json:"postgres,omitempty"`
+	Connection *NetworkedDatabaseConfig `json:"connection,omitempty"`
 
-	// External configures an external database connection.
+	// SQLite configures an embedded SQLite database.
 	// +optional
-	External *ExternalDatabaseConfig `json:"external,omitempty"`
+	SQLite *SQLiteConfig `json:"sqlite,omitempty"`
 }
 
-type ExternalDatabaseConfig struct {
+type NetworkedDatabaseConfig struct {
 	// Host is the database host.
-	Host string `json:"host"`
+	// +optional
+	Host string `json:"host,omitempty"`
 
 	// Port is the database port.
-	Port int `json:"port"`
-
-	// User is the database user.
-	User string `json:"user"`
-
-	// PasswordSecretRef references a secret containing the password.
-	PasswordSecretRef SecretRef `json:"passwordSecretRef"`
+	// +optional
+	Port int `json:"port,omitempty"`
 
 	// Database is the database name.
-	Database string `json:"database"`
-
-	// SSLMode is the SSL mode (disable, require, verify-ca, verify-full).
 	// +optional
-	SSLMode string `json:"sslMode,omitempty"`
+	Database string `json:"database,omitempty"`
+
+	// User is the database user.
+	// +optional
+	User string `json:"user,omitempty"`
+
+	// PasswordSecretRef references a secret containing the password.
+	// +optional
+	PasswordSecretRef *SecretRef `json:"passwordSecretRef,omitempty"`
+
+	// ConnectString is the connection string for Oracle.
+	// +optional
+	ConnectString string `json:"connectString,omitempty"`
+
+	// SSL configures SSL settings.
+	// +optional
+	SSL *SSLConfig `json:"ssl,omitempty"`
+}
+
+type SQLiteConfig struct {
+	// Filename is the path to the SQLite database file.
+	Filename string `json:"filename"`
+
+	// Persistence configures the PVC for SQLite.
+	// +optional
+	Persistence *PersistenceConfig `json:"persistence,omitempty"`
+}
+
+type PersistenceConfig struct {
+	// Size is the size of the PVC.
+	// +optional
+	Size string `json:"size,omitempty"`
+
+	// StorageClassName is the storage class for the PVC.
+	// +optional
+	StorageClassName string `json:"storageClassName,omitempty"`
+}
+
+type SSLConfig struct {
+	// Mode is the SSL mode.
+	// +kubebuilder:validation:Enum=disable;require;verify-ca;verify-full
+	// +optional
+	Mode string `json:"mode,omitempty"`
+
+	// CASecretRef references the CA certificate secret.
+	// +optional
+	CASecretRef *SecretRef `json:"caSecretRef,omitempty"`
+
+	// CertSecretRef references the client certificate secret.
+	// +optional
+	CertSecretRef *SecretRef `json:"certSecretRef,omitempty"`
+
+	// KeySecretRef references the client key secret.
+	// +optional
+	KeySecretRef *SecretRef `json:"keySecretRef,omitempty"`
 }
 
 type SecretRef struct {
@@ -95,16 +148,6 @@ type SecretRef struct {
 
 	// Key is the key in the secret.
 	Key string `json:"key"`
-}
-
-type PostgresConfig struct {
-	// Instances is the number of Postgres instances.
-	// +optional
-	Instances int `json:"instances,omitempty"`
-
-	// Storage is the storage size.
-	// +optional
-	Storage string `json:"storage,omitempty"`
 }
 
 type Extension struct {
