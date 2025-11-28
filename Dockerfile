@@ -19,11 +19,12 @@ COPY internal/controller/ internal/controller/
 # Build with cache mount for faster rebuilds
 # - Removed -a flag (forces full rebuild)
 # - Added ldflags to strip debug symbols (smaller/faster binary)
+# - Added trimpath for reproducible builds
 # - Mount Go build cache for incremental compilation
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
-    go build -ldflags="-s -w" -o manager cmd/main.go
+    go build -trimpath -ldflags="-s -w" -o manager cmd/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
