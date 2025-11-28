@@ -7,7 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # Note: github.repository is lowercase by default, but we force it for consistency
+  IMAGE_NAME: face-to-face-it/directus-operator
 
 permissions:
   contents: write
@@ -222,7 +223,7 @@ jobs:
 
             ### Docker Image
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ needs.validate.outputs.version }}
+            docker pull ghcr.io/face-to-face-it/directus-operator:${{ needs.validate.outputs.version }}
             ```
 
             ### Helm Chart
