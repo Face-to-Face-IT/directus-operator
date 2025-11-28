@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   directus-operator:
   - apiVersion: v2
+    appVersion: 0.8.0-alpha
+    created: "2025-11-28T21:56:32.907339163Z"
+    description: A Helm chart for Kubernetes
+    digest: 90f64edb930fa82260ffda80e1341219f0a2f594f9015029cd5b0eeeb08730cd
+    name: directus-operator
+    type: application
+    urls:
+    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.8.0-alpha/directus-operator-0.8.0-alpha.tgz
+    version: 0.8.0-alpha
+  - apiVersion: v2
     appVersion: 0.7.0-alpha
     created: "2025-11-28T21:29:16.332729364Z"
     description: A Helm chart for Kubernetes
@@ -113,16 +123,6 @@ entries:
     version: 0.4.1-alpha
   - apiVersion: v2
     appVersion: 0.4.0-alpha
-    created: "2025-11-22T19:02:02.752109725Z"
-    description: A Helm chart for Kubernetes
-    digest: c7266e5d2ee644da952f70e9d3b76d4f5eadb0ed3f393a79ece48a0605e89bc1
-    name: directus-operator
-    type: application
-    urls:
-    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.4.0-alpha/directus-operator-0.4.0-alpha.tgz
-    version: 0.4.0-alpha
-  - apiVersion: v2
-    appVersion: 0.4.0-alpha
     created: "2025-11-22T15:05:59.054047349Z"
     description: A Helm chart for Kubernetes
     digest: f15bd5a0f6cabe6dad18b6a11c6e1d716b5e4d449e38cfc75bf9af66899c3897
@@ -136,6 +136,16 @@ entries:
     created: "2025-11-22T19:01:28.7231971Z"
     description: A Helm chart for Kubernetes
     digest: bd4ae547f7e5cab9cb493b009f4d435a2ca7eeccd2ecb750aacc05c6c40735fd
+    name: directus-operator
+    type: application
+    urls:
+    - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.4.0-alpha/directus-operator-0.4.0-alpha.tgz
+    version: 0.4.0-alpha
+  - apiVersion: v2
+    appVersion: 0.4.0-alpha
+    created: "2025-11-22T19:02:02.752109725Z"
+    description: A Helm chart for Kubernetes
+    digest: c7266e5d2ee644da952f70e9d3b76d4f5eadb0ed3f393a79ece48a0605e89bc1
     name: directus-operator
     type: application
     urls:
@@ -241,4 +251,4 @@ entries:
     urls:
     - https://github.com/Face-to-Face-IT/directus-operator/releases/download/directus-operator-0.1.0-alpha/directus-operator-0.1.0-alpha.tgz
     version: 0.1.0-alpha
-generated: "2025-11-28T21:29:16.333018265Z"
+generated: "2025-11-28T21:56:32.907627563Z"
