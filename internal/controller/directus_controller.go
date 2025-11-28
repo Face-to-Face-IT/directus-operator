@@ -522,10 +522,53 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_CONNECT_STRING", Value: conn.ConnectString})
 				}
 
-				if conn.SSL != nil {
-					if conn.SSL.Mode != "" {
-						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_SSL", Value: "true"})
-						// Note: Directus might need more specific SSL env vars depending on the driver
+				// SSL Configuration
+				// Directus uses nested env vars: DB_SSL__REJECT_UNAUTHORIZED, DB_SSL__CA, etc.
+				if conn.SSL != nil && conn.SSL.Mode != "" {
+					switch conn.SSL.Mode {
+					case "disable":
+						// No SSL - don't set any SSL env vars
+					case "require":
+						// SSL without certificate validation (for AWS Aurora, etc.)
+						container.Env = append(container.Env, corev1.EnvVar{
+							Name:  "DB_SSL__REJECT_UNAUTHORIZED",
+							Value: "false",
+						})
+					case "verify-ca", "verify-full":
+						// SSL with certificate validation
+						container.Env = append(container.Env, corev1.EnvVar{
+							Name:  "DB_SSL__REJECT_UNAUTHORIZED",
+							Value: "true",
+						})
+						// Mount CA certificate if provided
+						if conn.SSL.CASecretRef != nil {
+							// Add CA certificate path
+							container.Env = append(container.Env, corev1.EnvVar{
+								Name:  "DB_SSL__CA",
+								Value: "/etc/directus/ssl/ca.crt",
+							})
+							// Add volume mount for CA cert
+							container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+								Name:      "db-ssl-ca",
+								MountPath: "/etc/directus/ssl",
+								ReadOnly:  true,
+							})
+							// Add volume for CA cert secret
+							dep.Spec.Template.Spec.Volumes = append(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+								Name: "db-ssl-ca",
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: conn.SSL.CASecretRef.Name,
+										Items: []corev1.KeyToPath{
+											{
+												Key:  conn.SSL.CASecretRef.Key,
+												Path: "ca.crt",
+											},
+										},
+									},
+								},
+							})
+						}
 					}
 				}
 			}

@@ -1,0 +1,5 @@
+kind: Fixed
+body: 'SSL handling for PostgreSQL: use DB_SSL__REJECT_UNAUTHORIZED=false for ''require'' mode and mount CA certificates for ''verify-ca''/''verify-full'' modes'
+time: 2025-11-28T16:10:06.901223222-06:00
+custom:
+    "": ""
