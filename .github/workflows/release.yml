@@ -118,9 +118,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Release Helm chart to GitHub Pages
+  # Release Helm chart to GitHub Pages (only after Docker image is published)
   helm:
-    needs: [validate, test]
+    needs: [validate, test, docker]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
