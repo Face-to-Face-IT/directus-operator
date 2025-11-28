@@ -20,6 +20,12 @@ kinds:
     - label: Security
       auto: patch
 post:
+    - name: Sync Chart Version
+      args:
+        - sed
+        - -i
+        - 's/^version: .*/version: {{.Version}}/'
+        - charts/directus-operator/Chart.yaml
     - name: Sync Chart AppVersion
       args:
         - sed

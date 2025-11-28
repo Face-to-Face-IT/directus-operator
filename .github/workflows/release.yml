@@ -1,16 +1,126 @@
-name: Release Charts
+name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
+  packages: write
 
 jobs:
-  release:
-    # depending on default permission settings for your org (contents being read-only or read-write), you will have to add permissions
-    # see: https://docs.github.com/en/actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token
-    permissions:
-      contents: write
+  # Validate that versions are in sync before releasing
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify versions match tag
+        run: |
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+          MAKEFILE_VERSION=$(grep "^VERSION ?=" Makefile | sed 's/VERSION ?= //')
+          CHART_VERSION=$(grep "^version:" charts/directus-operator/Chart.yaml | sed 's/version: //')
+          CHART_APP_VERSION=$(grep "^appVersion:" charts/directus-operator/Chart.yaml | sed 's/appVersion: "//' | sed 's/"//')
+          
+          echo "Tag version: $TAG_VERSION"
+          echo "Makefile VERSION: $MAKEFILE_VERSION"
+          echo "Chart version: $CHART_VERSION"
+          echo "Chart appVersion: $CHART_APP_VERSION"
+          
+          ERRORS=0
+          if [ "$TAG_VERSION" != "$MAKEFILE_VERSION" ]; then
+            echo "❌ Error: Tag version ($TAG_VERSION) != Makefile VERSION ($MAKEFILE_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          if [ "$TAG_VERSION" != "$CHART_VERSION" ]; then
+            echo "❌ Error: Tag version ($TAG_VERSION) != Chart version ($CHART_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          if [ "$TAG_VERSION" != "$CHART_APP_VERSION" ]; then
+            echo "❌ Error: Tag version ($TAG_VERSION) != Chart appVersion ($CHART_APP_VERSION)"
+            ERRORS=$((ERRORS + 1))
+          fi
+          
+          if [ $ERRORS -gt 0 ]; then
+            echo ""
+            echo "💡 Hint: Run 'make release' to sync versions before tagging"
+            exit 1
+          fi
+          
+          echo "✅ All versions match: $TAG_VERSION"
+
+  # Run tests
+  test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: make test
+
+  # Build and push Docker image
+  docker:
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Release Helm chart to GitHub Pages
+  helm:
+    needs: [validate, test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,8 +134,55 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+        uses: helm/chart-releaser-action@v1.6.0
         with:
           skip_existing: true
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+  # Create GitHub Release with changelog
+  release:
+    needs: [validate, docker, helm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          # Extract the changelog section for this version (between ## VERSION and next ## or EOF)
+          CHANGELOG=$(awk "/^## ${VERSION}/,/^## [0-9]/" CHANGELOG.md | sed '$ d')
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="Release ${VERSION}"
+          fi
+          # Use delimiter for multiline output
+          echo "BODY<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.validate.outputs.version }}
+          body: |
+            ## Installation
+
+            ### Docker Image
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ needs.validate.outputs.version }}
+            ```
+
+            ### Helm Chart
+            ```bash
+            helm repo add directus-operator https://face-to-face-it.github.io/directus-operator
+            helm repo update
+            helm install directus-operator directus-operator/directus-operator --version ${{ needs.validate.outputs.version }}
+            ```
+
+            ---
+
+            ${{ steps.changelog.outputs.BODY }}
+          draft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          generate_release_notes: false

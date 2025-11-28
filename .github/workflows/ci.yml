@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run tests
+        run: make test
+
+      - name: Build
+        run: make build
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run linters
+        run: |
+          make fmt
+          make vet
+          git diff --exit-code || (echo "Code is not formatted. Run 'make fmt'" && exit 1)
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/directus-operator
+
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify versions are in sync
+        run: |
+          MAKEFILE_VERSION=$(grep "^VERSION ?=" Makefile | sed 's/VERSION ?= //')
+          CHART_VERSION=$(grep "^version:" charts/directus-operator/Chart.yaml | sed 's/version: //')
+          CHART_APP_VERSION=$(grep "^appVersion:" charts/directus-operator/Chart.yaml | sed 's/appVersion: "//' | sed 's/"//')
+          
+          echo "Makefile VERSION: $MAKEFILE_VERSION"
+          echo "Chart version: $CHART_VERSION"
+          echo "Chart appVersion: $CHART_APP_VERSION"
+          
+          if [ "$MAKEFILE_VERSION" != "$CHART_VERSION" ]; then
+            echo "❌ Error: Makefile VERSION ($MAKEFILE_VERSION) != Chart version ($CHART_VERSION)"
+            exit 1
+          fi
+          
+          if [ "$MAKEFILE_VERSION" != "$CHART_APP_VERSION" ]; then
+            echo "❌ Error: Makefile VERSION ($MAKEFILE_VERSION) != Chart appVersion ($CHART_APP_VERSION)"
+            exit 1
+          fi
+          
+          echo "✅ All versions are in sync: $MAKEFILE_VERSION"
+
+  # Build and push Docker image on every push to main (tagged as :main and :sha-xxx)
+  docker-build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
