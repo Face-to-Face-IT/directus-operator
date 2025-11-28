@@ -292,6 +292,19 @@ changelog: ## Create a new changelog entry
 	changie new
 
 .PHONY: release
-release: ## Release a new version (batches changelog and syncs versions)
+release: ## Release a new version (batches changelog, syncs versions, commits, and tags)
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "❌ Error: Working directory is not clean. Please commit or stash changes first."; \
+		exit 1; \
+	fi
 	changie batch auto
 	changie merge
+	@NEW_VERSION=$$(grep "^VERSION ?=" Makefile | sed 's/VERSION ?= //'); \
+	git add -A; \
+	git commit -m "chore: release v$${NEW_VERSION}"; \
+	git tag "v$${NEW_VERSION}"; \
+	echo ""; \
+	echo "✅ Release v$${NEW_VERSION} prepared!"; \
+	echo ""; \
+	echo "To publish, run:"; \
+	echo "  git push && git push --tags"
