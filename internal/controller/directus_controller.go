@@ -48,6 +48,7 @@ type DirectusReconciler struct {
 //+kubebuilder:rbac:groups=apps.directus.io,resources=directuses/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
 
@@ -411,32 +412,114 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 			if directus.Spec.Database.Connection != nil {
 				conn := directus.Spec.Database.Connection
 
-				if conn.Host != "" {
-					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_HOST", Value: conn.Host})
-				}
-				if conn.Port != 0 {
-					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_PORT", Value: fmt.Sprintf("%d", conn.Port)})
-				}
-				if conn.Database != "" {
-					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_DATABASE", Value: conn.Database})
-				}
-				if conn.User != "" {
-					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_USER", Value: conn.User})
-				}
-				if conn.ConnectString != "" {
-					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_CONNECT_STRING", Value: conn.ConnectString})
-				}
+				// Check if ConnectionSecretRef is set - use secret references for all values
+				if conn.ConnectionSecretRef != nil {
+					secretRef := conn.ConnectionSecretRef
 
-				if conn.PasswordSecretRef != nil {
+					// Host from secret
+					hostKey := "host"
+					if secretRef.HostKey != "" {
+						hostKey = secretRef.HostKey
+					}
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name: "DB_HOST",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name},
+								Key:                  hostKey,
+							},
+						},
+					})
+
+					// Port from secret
+					portKey := "port"
+					if secretRef.PortKey != "" {
+						portKey = secretRef.PortKey
+					}
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name: "DB_PORT",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name},
+								Key:                  portKey,
+							},
+						},
+					})
+
+					// Database name from secret
+					dbKey := "dbname"
+					if secretRef.DatabaseKey != "" {
+						dbKey = secretRef.DatabaseKey
+					}
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name: "DB_DATABASE",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name},
+								Key:                  dbKey,
+							},
+						},
+					})
+
+					// User from secret
+					userKey := "user"
+					if secretRef.UserKey != "" {
+						userKey = secretRef.UserKey
+					}
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name: "DB_USER",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name},
+								Key:                  userKey,
+							},
+						},
+					})
+
+					// Password from secret
+					passwordKey := "password"
+					if secretRef.PasswordKey != "" {
+						passwordKey = secretRef.PasswordKey
+					}
 					container.Env = append(container.Env, corev1.EnvVar{
 						Name: "DB_PASSWORD",
 						ValueFrom: &corev1.EnvVarSource{
 							SecretKeyRef: &corev1.SecretKeySelector{
-								LocalObjectReference: corev1.LocalObjectReference{Name: conn.PasswordSecretRef.Name},
-								Key:                  conn.PasswordSecretRef.Key,
+								LocalObjectReference: corev1.LocalObjectReference{Name: secretRef.Name},
+								Key:                  passwordKey,
 							},
 						},
 					})
+				} else {
+					// Use individual field values (existing behavior)
+					if conn.Host != "" {
+						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_HOST", Value: conn.Host})
+					}
+					if conn.Port != 0 {
+						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_PORT", Value: fmt.Sprintf("%d", conn.Port)})
+					}
+					if conn.Database != "" {
+						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_DATABASE", Value: conn.Database})
+					}
+					if conn.User != "" {
+						container.Env = append(container.Env, corev1.EnvVar{Name: "DB_USER", Value: conn.User})
+					}
+
+					if conn.PasswordSecretRef != nil {
+						container.Env = append(container.Env, corev1.EnvVar{
+							Name: "DB_PASSWORD",
+							ValueFrom: &corev1.EnvVarSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: conn.PasswordSecretRef.Name},
+									Key:                  conn.PasswordSecretRef.Key,
+								},
+							},
+						})
+					}
+				}
+
+				if conn.ConnectString != "" {
+					container.Env = append(container.Env, corev1.EnvVar{Name: "DB_CONNECT_STRING", Value: conn.ConnectString})
 				}
 
 				if conn.SSL != nil {
@@ -449,6 +532,12 @@ func (r *DirectusReconciler) reconcileDeployment(ctx context.Context, directus *
 		}
 
 		dep.Spec.Template.Spec.Containers = []corev1.Container{container}
+
+		// Apply resources if specified
+		if directus.Spec.Resources.Limits != nil || directus.Spec.Resources.Requests != nil {
+			dep.Spec.Template.Spec.Containers[0].Resources = directus.Spec.Resources
+		}
+
 		return ctrl.SetControllerReference(directus, dep, r.Scheme)
 	})
 

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -60,6 +61,10 @@ type DirectusSpec struct {
 	// PodAnnotations are additional annotations to add to the Directus pods.
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// Resources defines the compute resources for the Directus container.
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // +kubebuilder:validation:XValidation:rule="self.client == 'sqlite3' ? has(self.sqlite) : !has(self.sqlite)",message="sqlite config must be set if and only if client is sqlite3"
@@ -79,6 +84,11 @@ type DatabaseConfig struct {
 }
 
 type NetworkedDatabaseConfig struct {
+	// ConnectionSecretRef references a secret containing all database connection values.
+	// When set, values from this secret take precedence over individual fields.
+	// +optional
+	ConnectionSecretRef *ConnectionSecretRef `json:"connectionSecretRef,omitempty"`
+
 	// Host is the database host.
 	// +optional
 	Host string `json:"host,omitempty"`
@@ -152,6 +162,32 @@ type SecretRef struct {
 
 	// Key is the key in the secret.
 	Key string `json:"key"`
+}
+
+// ConnectionSecretRef references a secret containing all database connection values.
+type ConnectionSecretRef struct {
+	// Name is the name of the secret.
+	Name string `json:"name"`
+
+	// HostKey is the key for the host value (default: "host").
+	// +optional
+	HostKey string `json:"hostKey,omitempty"`
+
+	// PortKey is the key for the port value (default: "port").
+	// +optional
+	PortKey string `json:"portKey,omitempty"`
+
+	// DatabaseKey is the key for the database name (default: "dbname").
+	// +optional
+	DatabaseKey string `json:"databaseKey,omitempty"`
+
+	// UserKey is the key for the user value (default: "user").
+	// +optional
+	UserKey string `json:"userKey,omitempty"`
+
+	// PasswordKey is the key for the password value (default: "password").
+	// +optional
+	PasswordKey string `json:"passwordKey,omitempty"`
 }
 
 type Extension struct {
